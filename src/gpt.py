@@ -16,8 +16,19 @@ from llama_index import (
 from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions  import ResourceExistsError
+import logging, sys
 
 load_dotenv()
+
+if(os.getenv("RUNTIME_ENVIORNMENT") == "DEV"):
+    handler = logging.StreamHandler(stream=sys.stdout)
+    logger = logging.getLogger("azure")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    logger = logging.getLogger("azure.storage.blob")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
 openai.api_type = "azure"
 openai.api_base = os.getenv("OPENAI_API_BASE")
@@ -65,7 +76,7 @@ def generate_index(workspace):
     blob_client = blob_service_client.get_blob_client(container=blob_container_name, blob=file)
 
     if blob_client.exists():
-        blob_data = blob_client.download_blob()
+        blob_data = blob_client.download_blob(logging_enable=True)
         index = GPTSimpleVectorIndex.load_from_string(blob_data.readall(), service_context=service_context)
     else:
         documents = [Document(document) for document in workspace.documents]
