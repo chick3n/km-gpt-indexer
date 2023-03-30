@@ -14,6 +14,8 @@ from llama_index import (
     Document
 )
 from dotenv import load_dotenv
+from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions  import ResourceExistsError
 
 load_dotenv()
 
@@ -23,7 +25,9 @@ openai.api_version = "2023-03-15-preview"
 #os.environ["OPENAI_API_KEY"] = "<insert api key from azure>"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-index_path = os.getenv("INDEX_PATH")
+blob_container_name = os.getenv("CONTAINER_NAME")
+blob_connection_string = os.getenv("StorageConnectionString")
+blob_service_client = BlobServiceClient.from_connection_string(blob_connection_string)
 
 llm = AzureOpenAI(deployment_name="text-davinci-003", model_kwargs={
     "api_key": openai.api_key,
@@ -58,16 +62,17 @@ service_context = ServiceContext.from_defaults(
 
 def generate_index(workspace):
     file = workspace.name+'.json'
-    path = Path(f"{index_path}\\{file}")
+    blob_client = blob_service_client.get_blob_client(container=blob_container_name, blob=file)
 
-    if path.is_file():
-        index = GPTSimpleVectorIndex.load_from_disk(path, service_context=service_context)
+    if blob_client.exists():
+        blob_data = blob_client.download_blob()
+        index = GPTSimpleVectorIndex.load_from_string(blob_data.readall(), service_context=service_context)
     else:
         documents = [Document(document) for document in workspace.documents]
         index = GPTSimpleVectorIndex.from_documents(documents, service_context=service_context)
-        with open(path, 'w'):
-            pass
-        index.save_to_disk(path)
+        
+        json = index.save_to_string()
+        blob_client.upload_blob(json, overwrite=True)        
         
     return index
 

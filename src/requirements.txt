@@ -4,3 +4,4 @@ python-dotenv
 pydantic
 openai
 uvicorn
+azure-storage-blob
