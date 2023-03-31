@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions  import ResourceExistsError
 import logging, sys
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -29,6 +30,8 @@ if(os.getenv("RUNTIME_ENVIORNMENT") == "DEV"):
     logger = logging.getLogger("azure.storage.blob")
     logger.setLevel(logging.DEBUG)
     logger.addHandler(handler)
+
+logger = logging.getLogger()
 
 openai.api_type = "azure"
 openai.api_base = os.getenv("OPENAI_API_BASE")
@@ -71,6 +74,14 @@ service_context = ServiceContext.from_defaults(
     prompt_helper=prompt_helper
 )
 
+def clean_document(text):
+    #if html
+    if(bool(BeautifulSoup(text, "html.parser").find())):
+        logger.log(logging.INFO, "Cleaning html request")
+        soup = BeautifulSoup(text, 'lxml')
+        text = soup.text
+    return text
+
 def generate_index(workspace):
     file = workspace.name+'.json'
     blob_client = blob_service_client.get_blob_client(container=blob_container_name, blob=file)
@@ -79,7 +90,7 @@ def generate_index(workspace):
         blob_data = blob_client.download_blob(logging_enable=True)
         index = GPTSimpleVectorIndex.load_from_string(blob_data.readall(), service_context=service_context)
     else:
-        documents = [Document(document) for document in workspace.documents]
+        documents = [Document(clean_document(document)) for document in workspace.documents]
         index = GPTSimpleVectorIndex.from_documents(documents, service_context=service_context)
         
         json = index.save_to_string()
